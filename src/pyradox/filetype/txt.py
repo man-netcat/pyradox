@@ -250,6 +250,13 @@ class TreeParseState():
             else:
                 self.next = self.process_key
         elif token_type == 'begin':
+            # Try to infer an implicit color block: { x y z }
+            inferred_color, new_pos = self.maybe_infer_color(self.pos)
+            if inferred_color is not None:
+                self.pos = new_pos
+                self.append_to_result(inferred_color)
+                self.next = self.process_key
+                return
             # Value is a tree or group. First, determine whether this is a tree or group.
             lookahead_pos = self.pos
             level = 0
@@ -351,6 +358,39 @@ class TreeParseState():
         
         warnings.warn_explicit('Found colorspace token %s without following color.' % (colorspace_token_string.lower()), ParseWarning, self.filename, colorspace_token_line_number + 1)
         return None
+    
+    def maybe_infer_color(self, start_pos):
+        """
+        Try to infer a color block without an explicit colorspace.
+        Returns (Color, new_pos) or (None, start_pos).
+        """
+        channels = []
+        pos = start_pos
+
+        while pos < len(self.token_data):
+            token_type, token_string, _ = self.token_data[pos]
+
+            if token_type in ('int', 'float'):
+                channels.append(pyradox.token.make_primitive(token_string, token_type))
+                pos += 1
+            elif token_type == 'comment':
+                pos += 1
+            elif token_type == 'end':
+                pos += 1
+                break
+            else:
+                return None, start_pos
+
+        if len(channels) != 3:
+            return None, start_pos
+
+        # Infer colorspace
+        if all(isinstance(c, float) and 0.0 <= c <= 1.0 for c in channels):
+            colorspace = 'hsv'
+        else:
+            colorspace = 'rgb'
+
+        return pyradox.Color(channels, colorspace), pos
 
 def parse_tree(token_data, filename, start_pos = 0):
     """Given a list of (token_type, token_string, line_number) from the lexer, produces a Tree."""
