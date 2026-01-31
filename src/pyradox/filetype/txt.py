@@ -363,7 +363,12 @@ class TreeParseState():
         """
         Try to infer a color block without an explicit colorspace.
         Returns (Color, new_pos) or (None, start_pos).
+        Explicitly ignores certain keys like 'mask'.
         """
+        # If the current key is 'mask', do NOT infer a color
+        if self.key_string and self.key_string.lower() == "mask":
+            return None, start_pos
+
         channels = []
         pos = start_pos
 
